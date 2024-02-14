@@ -670,6 +670,8 @@ class KernelConfig:
     init_cnode_bits: int
     cap_address_bits: int
     fan_out_limit: int
+    device_regions: List[Tuple[int, int]]
+    normal_regions: List[Tuple[int, int]]
 
 
 @dataclass
@@ -748,25 +750,18 @@ def _kernel_partial_boot(
     device_memory = DisjointMemoryRegion()
     normal_memory = DisjointMemoryRegion()
 
-    # Start by allocating the entire physical address space
-    # as device memory.
-    device_memory.insert_region(0, kernel_config.paddr_user_device_top)
+    for region in kernel_config.device_regions:
+        device_memory.insert_region(region[0], region[1])
+    for region in device_memory._regions:
+        print(f"device: 0x{region.base:x}..0x{region.end:x}")
 
-    # Next, remove all the kernel devices.
-    # NOTE: There is an assumption each kernel device is one frame
-    # in size only. It's possible this assumption could break in the
-    # future.
-    for paddr in _kernel_device_addrs(kernel_elf):
-        device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size)
-
-    # Remove all the actual physical memory from the device regions
-    # but add it all to the actual normal memory regions
-    for start, end in _kernel_phys_mem(kernel_elf):
-        device_memory.remove_region(start, end)
-        normal_memory.insert_region(start, end)
+    for region in kernel_config.normal_regions:
+        normal_memory.insert_region(region[0], region[1])
 
     # Remove the kernel image itself
     normal_memory.remove_region(*_kernel_self_mem(kernel_elf))
+    for region in normal_memory._regions:
+        print(f"normal: 0x{region.base:x}..0x{region.end:x}")
 
     # but get the boot region, we'll add that back later
     # FIXME: Why calcaultae it now if we add it back later?

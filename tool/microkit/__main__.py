@@ -44,6 +44,7 @@ from struct import pack, Struct
 from os import environ
 from math import log2, ceil
 from sys import argv, executable, stderr
+from json import load as json_load
 
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -1588,6 +1589,9 @@ def main() -> int:
     kernel_elf_path = elf_path / "sel4.elf"
     monitor_elf_path = elf_path / "monitor.elf"
 
+    config_path = SDK_DIR / "board" / args.board / args.config
+    platform_gen_config_path = config_path / "platform_gen.json"
+
     if not elf_path.exists():
         print(f"Error: board ELF directory '{elf_path}' does not exist")
         return 1
@@ -1599,6 +1603,9 @@ def main() -> int:
         return 1
     if not monitor_elf_path.exists():
         print(f"Error: monitor ELF '{monitor_elf_path}' does not exist")
+        return 1
+    if not platform_gen_config_path.exists():
+        print(f"Error: platform configuration '{platform_gen_config_path}' does not exist")
         return 1
 
     if not args.system.exists():
@@ -1612,6 +1619,13 @@ def main() -> int:
 
     kernel_elf = ElfFile.from_path(kernel_elf_path)
 
+    with open(platform_gen_config_path, "r") as f:
+        # For emulating the kernel boot process, we must get the regions of physical memory
+        # that the kernel treats as "device" memory and "normal" memory
+        platform_gen = json_load(f)
+        kernel_device_regions = [(r["start"], r["end"]) for r in platform_gen["devices"]]
+        kernel_normal_regions = [(r["start"], r["end"]) for r in platform_gen["memory"]]
+
     # FIXME: The kernel config should be an output of the kernel
     # build step (or embedded into the kernel elf file in some manner
     kernel_config = KernelConfig(
@@ -1621,7 +1635,9 @@ def main() -> int:
         kernel_frame_size=(1 << 12),
         init_cnode_bits=12,
         cap_address_bits=64,
-        fan_out_limit=256
+        fan_out_limit=256,
+        device_regions=kernel_device_regions,
+        normal_regions=kernel_normal_regions,
     )
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
