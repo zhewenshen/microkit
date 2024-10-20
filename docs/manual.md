@@ -402,6 +402,23 @@ All program images should link against `libmicrokit.a`.
 
 The library provides the C runtime for the protection domain, along with interfaces for the Microkit APIs.
 
+## Language Support
+
+### C
+
+libmicrokit is written in C and is packaged as a static library, `libmicrokit.a` in the SDK along
+with `libmicrokit.h` for each platform and each configuration of the platform.
+
+The header will be in `<sdk>/<board>/<config>/include`.
+
+### Rust
+
+Rust crates exist that implement the libmicrokit runtime/API for program images written in Rust.
+They are not packaged with the SDK and live in a separate repository that can be found at:
+https://github.com/seL4/rust-sel4.
+
+## API
+
 The component must provide the following functions:
 
     void init(void);
@@ -441,12 +458,12 @@ If the protection domain has children it must also implement:
     void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response);
 
 
-## `void init(void)`
+### `void init(void)`
 
 Every PD must expose an `init` entry point.
 This is called by the system at boot time.
 
-## `void notified(microkit_channel ch)`
+### `void notified(microkit_channel ch)`
 
 The `notified` entry point is called by the system when a PD has received a notification on a channel.
 
@@ -456,7 +473,7 @@ The `notified` entry point is called by the system when a PD has received a noti
 
 Channel identifiers are specified in the system configuration.
 
-## `microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)`
+### `microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)`
 
 The `protected` entry point is optional.
 This is invoked when another PD calls `microkit_ppcall` on a channel shared with the PD.
@@ -474,7 +491,7 @@ Note: The message is *copied* from the caller.
 The returned `microkit_msginfo` is the return value of the protected procedure.
 As with arguments, this is *copied* to the caller.
 
-## `seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)`
+### `seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)`
 
 The `fault` entry point being invoked depends on whether the given PD has children.
 It is invoked when a child PD or VM causes a fault.
@@ -499,7 +516,7 @@ To find the full list of possible faults that could occur and details regarding 
 kind of fault, please see the 'Faults' section of the
 [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
 
-## `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
+### `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
 
 Performs a call to a protected procedure in a different PD.
 The `ch` argument identifies the protected procedure to be called.
@@ -508,16 +525,16 @@ Channel identifiers are specified in the system configuration.
 
 The protected procedure's return data is returned in the `microkit_msginfo`.
 
-## `void microkit_notify(microkit_channel ch)`
+### `void microkit_notify(microkit_channel ch)`
 
 Notify the channel `ch`.
 Channel identifiers are specified in the system configuration.
 
-## `void microkit_irq_ack(microkit_channel ch)`
+### `void microkit_irq_ack(microkit_channel ch)`
 
 Acknowledge the interrupt identified by the specified channel.
 
-## `void microkit_deferred_notify(microkit_channel ch)`
+### `void microkit_deferred_notify(microkit_channel ch)`
 
 The same as `microkit_notify` but will instead not actually perform the notify until
 the entry point where `microkit_deferred_notify` was called returns.
@@ -528,7 +545,7 @@ same entry point.
 The purpose of this API is for performance critical code as this API saves
 a kernel system call.
 
-## `void microkit_deferred_irq_ack(microkit_channel ch)`
+### `void microkit_deferred_irq_ack(microkit_channel ch)`
 
 The same as `microkit_irq_ack` but will instead not actually perform the IRQ acknowledge
 until the entry point where `microkit_deferred_irq_ack` was called returns.
@@ -539,47 +556,47 @@ same entry point.
 The purpose of this API is for performance critical code as this API saves
 a kernel system call.
 
-## `void microkit_pd_restart(microkit_child pd, uintptr_t entry_point)`
+### `void microkit_pd_restart(microkit_child pd, uintptr_t entry_point)`
 
 Restart the execution of a child protection domain with ID `pd` at the given `entry_point`.
 This will set the program counter of the child protection domain to `entry_point`.
 
-## `void microkit_pd_stop(microkit_child pd)`
+### `void microkit_pd_stop(microkit_child pd)`
 
 Stop the execution of the child protection domain with ID `pd`.
 
-## `microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)`
+### `microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)`
 
 Creates a new message structure.
 
 The message can be passed to `microkit_ppcall` or returned from `protected`.
 
-## `uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo)`
+### `uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo)`
 
 Returns the label from a message.
 
-## `uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo)`
+### `uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo)`
 
 Returns the count of message registers in the message.
 
-## `uint64_t microkit_mr_get(uint8_t mr)`
+### `uint64_t microkit_mr_get(uint8_t mr)`
 
 Get a message register.
 
-## `void microkit_mr_set(uint8_t mr, uint64_t value)`
+### `void microkit_mr_set(uint8_t mr, uint64_t value)`
 
 Set a message register.
 
-## `void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_point)`
+### `void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_point)`
 
 Restart the execution of a VM's virtual CPU with ID `vcpu` at the given `entry point`.
 This will set the program counter of the vCPU to `entry_point`.
 
-## `void microkit_vcpu_stop(microkit_child vcpu)`
+### `void microkit_vcpu_stop(microkit_child vcpu)`
 
 Stop the execution of the VM's virtual CPU with ID `vcpu`.
 
-## `void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq,
+### `void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq,
 seL4_Uint8 priority, seL4_Uint8 group,
 seL4_Uint8 index)`
 
@@ -589,24 +606,24 @@ priority level the virtual IRQ will be injected as. The `group` determines wheth
 the virtual IRQ will be injected into secure world (1) or non-secure world (0).
 The `index` is the index of the virtual GIC list register.
 
-## `void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq)`
+### `void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq)`
 
 Acknowledge a ARM virtual Private Peripheral Interrupt (PPI) with IRQ number `irq`
 for a VM's vCPU with ID `vcpu`.
 
-## `seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg)`
+### `seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg)`
 
 Read a register for a given virtual CPU with ID `vcpu`. The `reg` argument is the index of the
 register that is read. The list of registers is defined by the enum `seL4_VCPUReg`
 in the seL4 source code.
 
-## `void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value)`
+### `void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value)`
 
 Write to a register for a given virtual CPU with ID `vcpu`. The `reg` argument is the index of the
 register that is written to. The `value` argument is what the register will be set to.
 The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source code.
 
-## `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
+### `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
 
 This API is available only on ARM and only when seL4 has been configured to enable the
 `KernelAllowSMCCalls` option.

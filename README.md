@@ -7,10 +7,11 @@
 
 The purpose of the seL4 Microkit is to enable system designers to create static software systems based on the seL4 microkernel.
 
-The seL4 Microkit consists of three parts:
+The seL4 Microkit consists of four parts:
 
    * Microkit library
    * Microkit initial task
+   * Microkit bootloader
    * Microkit tool
 
 The Microkit is distributed as a software development kit (SDK).
