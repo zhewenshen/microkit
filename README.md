@@ -32,8 +32,6 @@ The remainder of this README is for Microkit developers.
 Building the Microkit SDK is supported on Linux (x86_64) and macOS (Apple Silicon/Intel).
 
 This section attempts to list the packages or external development tools which are required during development.
-At this stage it may be incomplete.
-Please file an issue if additional packages are required.
 
 * Rust and Cargo
 * git
