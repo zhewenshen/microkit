@@ -11,6 +11,16 @@
 #include "util.h"
 #include "debug.h"
 
+char *strcpy(char *dst, const char *src) {
+    int i = 0;
+    while (src[i] != 0) {
+        dst[i] = src[i];
+        i++;
+    }
+
+    return dst;
+}
+
 void
 dump_bootinfo(seL4_BootInfo *bi)
 {

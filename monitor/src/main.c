@@ -90,6 +90,7 @@ static char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word fault_ep;
 seL4_Word reply;
 seL4_Word tcbs[MAX_TCBS];
+seL4_Word num_tcbs;
 seL4_Word scheduling_contexts[MAX_TCBS];
 seL4_Word notification_caps[MAX_TCBS];
 
@@ -957,6 +958,15 @@ void main(seL4_BootInfo *bi)
     for (unsigned idx = 0; idx < system_invocation_count; idx++) {
         offset = perform_invocation(system_invocation_data, offset, idx);
     }
+
+#ifdef CONFIG_DEBUG_BUILD
+    for (unsigned idx = 0; idx < MAX_TCBS; idx++) {
+        if (pd_names[idx][0] == 0) {
+            continue;
+        }
+        seL4_DebugNameThread(tcbs[idx], pd_names[idx]);
+    }
+#endif
 
     puts("MON|INFO: completed system invocations\n");
 
