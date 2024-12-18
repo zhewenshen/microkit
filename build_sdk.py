@@ -266,6 +266,21 @@ SUPPORTED_BOARDS = (
         }
     ),
     BoardInfo(
+        name="polarfire",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x90000000,
+        kernel_options={
+            "KernelIsMCS": True,
+            "KernelPlatform": "polarfire",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
+        },
+        examples={
+            "hello": Path("example/polarfire/hello")
+        }
+    ),
+    BoardInfo(
         name="star64",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
