@@ -273,8 +273,6 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelIsMCS": True,
             "KernelPlatform": "polarfire",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         },
         examples={
             "hello": Path("example/polarfire/hello")
