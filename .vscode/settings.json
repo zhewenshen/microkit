@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "microkit.h": "c",
+        "sel4.h": "c",
+        "stdint.h": "c",
+        "syscalls.h": "c"
+    }
+}

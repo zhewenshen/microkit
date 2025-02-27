@@ -27,6 +27,16 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_VM_TCB_CAP 266
 #define BASE_VCPU_CAP 330
 
+// core management stuff...
+#define BASE_SCHED_CONTEXT_CAP 394
+#define BASE_SCHED_CONTROL_CAP 458
+
+extern seL4_Word microkit_pd_period;
+extern seL4_Word microkit_pd_budget;
+extern seL4_Word microkit_pd_extra_refills;
+extern seL4_Word microkit_pd_badge;
+extern seL4_Word microkit_pd_flags;
+
 #define MICROKIT_MAX_CHANNELS 62
 #define MICROKIT_PD_NAME_LENGTH 64
 
@@ -41,6 +51,7 @@ extern char microkit_name[MICROKIT_PD_NAME_LENGTH];
 extern seL4_Bool microkit_have_signal;
 extern seL4_CPtr microkit_signal_cap;
 extern seL4_MessageInfo_t microkit_signal_msg;
+extern int microkit_magic_number;
 
 /*
  * Output a single character on the debug console.
@@ -234,3 +245,4 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
     microkit_signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
     microkit_signal_cap = (BASE_IRQ_CAP + ch);
 }
+

@@ -252,6 +252,9 @@ impl<'a> Loader<'a> {
 
         let kernel_entry = kernel_elf.entry;
 
+        // print the kernel entry point address
+        println!("Kernel entry point: {:#x}", kernel_entry);
+
         let pv_offset = inittask_first_paddr.wrapping_sub(inittask_first_vaddr);
 
         let ui_p_reg_start = inittask_first_paddr;

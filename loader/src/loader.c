@@ -557,8 +557,21 @@ static int ensure_correct_el(void)
 }
 #endif
 
+static void my_start_kernel(void)
+{
+    uintptr_t my_secondary_entry = 0x60000000a4;
+    puts("MY SECONDARY ENTRY: ");
+    puthex64(my_secondary_entry);
+    puts("\n");
+
+    // call this function with the entry point of the secondary CPU
+    ((void (*)(void))my_secondary_entry)();
+}
+
 static void start_kernel(void)
 {
+    // my_start_kernel();
+
     ((sel4_entry)(loader_data->kernel_entry))(
         loader_data->ui_p_reg_start,
         loader_data->ui_p_reg_end,
@@ -570,6 +583,9 @@ static void start_kernel(void)
         loader_data->extra_device_size
     );
 }
+
+volatile int upcnt = 0;
+
 
 #if defined(BOARD_zcu102) || defined(BOARD_qemu_virt_aarch64)
 static void configure_gicv2(void)
@@ -692,34 +708,67 @@ void secondary_cpu_entry() {
     asm volatile("dsb sy" ::: "memory");
     uint64_t cpu = curr_cpu_id;
 
-    int r;
-    r = ensure_correct_el();
-    if (r != 0) {
-        goto fail;
+    if (upcnt == NUM_CPUS - 1) {
+        int r;
+        r = ensure_correct_el();
+        if (r != 0) {
+            goto fail;
+        }
+
+        /* Get this CPU's ID and save it to TPIDR_EL1 for seL4. */
+        /* Whether or not seL4 is booting in EL2 does not matter, as it always looks at tpidr_el1 */
+        MSR("tpidr_el1", cpu);
+
+        puts("LDR|INFO: enabling MMU (CPU ");
+        puthex32(cpu);
+        puts(")\n");
+        el2_mmu_enable();
+
+        puts("LDR|INFO: jumping to kernel (CPU ");
+        puthex32(cpu);
+        puts(")\n");
+
+        dsb();
+        __atomic_store_n(&core_up[cpu], 1, __ATOMIC_RELEASE);
+        upcnt++;
+        dsb();
+
+        my_start_kernel();
+
+        puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED (CPU ");
+        puthex32(cpu);
+        puts(")\n");
+    } else {
+        int r;
+        r = ensure_correct_el();
+        if (r != 0) {
+            goto fail;
+        }
+
+        /* Get this CPU's ID and save it to TPIDR_EL1 for seL4. */
+        /* Whether or not seL4 is booting in EL2 does not matter, as it always looks at tpidr_el1 */
+        MSR("tpidr_el1", cpu);
+
+        puts("LDR|INFO: enabling MMU (CPU ");
+        puthex32(cpu);
+        puts(")\n");
+        el2_mmu_enable();
+
+        puts("LDR|INFO: jumping to kernel (CPU ");
+        puthex32(cpu);
+        puts(")\n");
+
+        dsb();
+        __atomic_store_n(&core_up[cpu], 1, __ATOMIC_RELEASE);
+        upcnt++;
+        dsb();
+
+        start_kernel();
+
+        puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED (CPU ");
+        puthex32(cpu);
+        puts(")\n");
     }
-
-    /* Get this CPU's ID and save it to TPIDR_EL1 for seL4. */
-    /* Whether or not seL4 is booting in EL2 does not matter, as it always looks at tpidr_el1 */
-    MSR("tpidr_el1", cpu);
-
-    puts("LDR|INFO: enabling MMU (CPU ");
-    puthex32(cpu);
-    puts(")\n");
-    el2_mmu_enable();
-
-    puts("LDR|INFO: jumping to kernel (CPU ");
-    puthex32(cpu);
-    puts(")\n");
-
-    dsb();
-    __atomic_store_n(&core_up[cpu], 1, __ATOMIC_RELEASE);
-    dsb();
-
-    start_kernel();
-
-    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED (CPU ");
-    puthex32(cpu);
-    puts(")\n");
 
 fail:
     /* Note: can't usefully return to U-Boot once we are here. */

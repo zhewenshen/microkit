@@ -281,6 +281,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPTMRUser": True,
             "KernelArmVtimerUpdateVOffset": False,
             "KernelMaxNumNodes": "4",
+            "KernelAllowSMCCalls": True,
         },
         examples={
             "hello": Path("example/qemu_virt_aarch64/hello"),
