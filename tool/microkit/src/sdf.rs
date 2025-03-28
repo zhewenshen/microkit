@@ -4,12 +4,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::{Config, IrqTrigger, PageSize};
-use crate::util::str_to_bool;
-use crate::MAX_PDS;
-use std::path::{Path, PathBuf};
-
-///
 /// This module is responsible for parsing the System Description Format (SDF)
 /// which is based on XML.
 /// We do not use any fancy XML, and instead keep things as minimal and simple
@@ -22,7 +16,10 @@ use std::path::{Path, PathBuf};
 /// but few seem to be concerned with giving any introspection regarding the parsed
 /// XML. The roxmltree project allows us to work on a lower-level than something based
 /// on serde and so we can report proper user errors.
-///
+use crate::sel4::{Config, IrqTrigger, PageSize};
+use crate::util::str_to_bool;
+use crate::MAX_PDS;
+use std::path::{Path, PathBuf};
 
 /// Events that come through entry points (e.g notified or protected) are given an
 /// identifier that is used as the badge at runtime.
@@ -93,6 +90,13 @@ pub struct SysMap {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum SysMemoryRegionKind {
+    User,
+    Elf,
+    Stack,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SysMemoryRegion {
     pub name: String,
     pub size: u64,
@@ -100,6 +104,10 @@ pub struct SysMemoryRegion {
     pub page_count: u64,
     pub phys_addr: Option<u64>,
     pub text_pos: Option<roxmltree::TextPos>,
+    /// For error reporting is useful to know whether the MR was created
+    /// due to the user's SDF or created by the tool for setting up the
+    /// stack, ELF, etc.
+    pub kind: SysMemoryRegionKind,
 }
 
 impl SysMemoryRegion {
@@ -130,6 +138,10 @@ pub struct SysIrq {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum SysSetVarKind {
+    // For size we do not store the size since when we parse mappings
+    // we do not have access to the memory region yet. The size is resolved
+    // when we actually need to perform the setvar.
+    Size { mr: String },
     Vaddr { address: u64 },
     Paddr { region: String },
 }
@@ -249,6 +261,7 @@ impl SysMap {
         let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
         if allow_setvar {
             attrs.push("setvar_vaddr");
+            attrs.push("setvar_size");
         }
         check_attributes(xml_sdf, node, &attrs)?;
 
@@ -322,6 +335,15 @@ impl ProtectionDomain {
                 (channel.end_a.pp && channel.end_b.pd == self_id)
                     || (channel.end_b.pp && channel.end_a.pd == self_id)
             })
+    }
+
+    pub fn irq_bits(&self) -> u64 {
+        let mut irqs = 0;
+        for irq in &self.irqs {
+            irqs |= 1 << irq.id;
+        }
+
+        irqs
     }
 
     fn from_xml(
@@ -419,7 +441,7 @@ impl ProtectionDomain {
             match config.arm_smc {
                 Some(smc_allowed) => {
                     if !smc_allowed {
-                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled for this platform".to_string()));
+                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled in the kernel for this platform".to_string()));
                     }
                 }
                 None => {
@@ -515,6 +537,24 @@ impl ProtectionDomain {
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             kind: SysSetVarKind::Vaddr { address: map.vaddr },
+                        });
+                    }
+
+                    if let Some(setvar_size) = child.attribute("setvar_size") {
+                        // Check that the symbol does not already exist
+                        for setvar in &setvars {
+                            if setvar_size == setvar.symbol {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    format!("setvar on symbol '{}' already exists", setvar_size),
+                                ));
+                            }
+                        }
+
+                        setvars.push(SysSetVar {
+                            symbol: setvar_size.to_string(),
+                            kind: SysSetVarKind::Size { mr: map.mr.clone() },
                         });
                     }
 
@@ -808,6 +848,7 @@ impl SysMemoryRegion {
             page_count,
             phys_addr,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            kind: SysMemoryRegionKind::User,
         })
     }
 }

@@ -5,6 +5,7 @@
 //
 
 use crate::UntypedObject;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 
@@ -16,6 +17,18 @@ pub struct BootInfo {
     pub page_cap_count: u64,
     pub untyped_objects: Vec<UntypedObject>,
     pub first_available_cap: u64,
+}
+
+#[derive(Deserialize)]
+pub struct PlatformConfigRegion {
+    pub start: u64,
+    pub end: u64,
+}
+
+#[derive(Deserialize)]
+pub struct PlatformConfig {
+    pub devices: Vec<PlatformConfigRegion>,
+    pub memory: Vec<PlatformConfigRegion>,
 }
 
 /// Represents an allocated kernel object.
@@ -57,6 +70,8 @@ pub struct Config {
     /// RISC-V specific, what kind of virtual memory system (e.g Sv39)
     pub riscv_pt_levels: Option<RiscvVirtualMemory>,
     pub invocations_labels: serde_json::Value,
+    pub device_regions: Vec<PlatformConfigRegion>,
+    pub normal_regions: Vec<PlatformConfigRegion>,
 }
 
 impl Config {
@@ -71,6 +86,19 @@ impl Config {
                 false => 0x800000000000,
             },
             Arch::Riscv64 => 0x0000003ffffff000,
+        }
+    }
+
+    pub fn virtual_base(&self) -> u64 {
+        // These match the PPTR_BASE define in the kernel source.
+        match self.arch {
+            Arch::Aarch64 => match self.hypervisor {
+                true => 0x0000008000000000,
+                false => 0xffffff8000000000,
+            },
+            Arch::Riscv64 => match self.riscv_pt_levels.unwrap() {
+                RiscvVirtualMemory::Sv39 => 0xffffffc000000000,
+            },
         }
     }
 
@@ -104,6 +132,21 @@ impl Config {
     /// in a VSpace.
     pub fn vm_map_max_vaddr(&self) -> u64 {
         self.user_top()
+    }
+
+    pub fn paddr_to_kernel_vaddr(&self, paddr: u64) -> u64 {
+        paddr.wrapping_add(self.virtual_base())
+    }
+
+    pub fn kernel_vaddr_to_paddr(&self, vaddr: u64) -> u64 {
+        vaddr.wrapping_sub(self.virtual_base())
+    }
+
+    pub fn aarch64_vspace_s2_start_l1(&self) -> bool {
+        match self.arch {
+            Arch::Aarch64 => self.hypervisor && self.arm_pa_size_bits.unwrap() == 40,
+            _ => panic!("internal error"),
+        }
     }
 }
 
@@ -734,7 +777,7 @@ impl Invocation {
         assert!(extra_caps < 8);
         assert!(length < 0x80);
 
-        label << 12 | caps << 9 | extra_caps << 7 | length
+        (label << 12) | (caps << 9) | (extra_caps << 7) | length
     }
 
     fn fmt_field(field_name: &'static str, value: u64) -> String {

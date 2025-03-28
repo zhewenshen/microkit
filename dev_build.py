@@ -28,7 +28,7 @@ def find_releases():
         releases.append(f)
 
     def release_sort_key(rel):
-        ver_str = rel.name.split("-")[-1]
+        ver_str = rel.name.split("-")[2]
         ver = tuple(int(x) for x in ver_str.split("."))
         return ver
 
@@ -90,9 +90,9 @@ def main():
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (
-        f"{release}/board/{args.board}/example/{args.example}"
+        f"{release}/example/{args.example}"
         if args.example_from_sdk
-        else f"{CWD.absolute()}/example/{args.board}/{args.example}"
+        else f"{CWD.absolute()}/example/{args.example}"
     )
 
     cmd = ["make", "-C", makefile_directory]

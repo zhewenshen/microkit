@@ -7,8 +7,9 @@
 
 The purpose of the seL4 Microkit is to enable system designers to create static software systems based on the seL4 microkernel.
 
-The seL4 Microkit consists of three parts:
+The seL4 Microkit consists of four parts:
 
+   * Microkit bootloader
    * Microkit library
    * Microkit initial task
    * Microkit tool
@@ -32,17 +33,15 @@ The remainder of this README is for Microkit developers.
 Building the Microkit SDK is supported on Linux (x86_64) and macOS (Apple Silicon/Intel).
 
 This section attempts to list the packages or external development tools which are required during development.
-At this stage it may be incomplete.
-Please file an issue if additional packages are required.
 
 * Rust and Cargo
 * git
 * make
-* python3.9
-* python3.9-venv
+* python3.12
+* python3.12-venv
 * cmake
 * ninja-build
-* ARM GCC compiler for none-elf; version 12.2.1 20221205
+* ARM GCC compiler for none-elf; version 12.2.Rel1
 * RISC-V GCC compiler for unknown-elf; version 13.2.0
 * device tree compiler
 * xmllint
@@ -67,20 +66,20 @@ On a Debian-like system you can do:
         device-tree-compiler libxml2-utils \
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
-        python3.9 python3.9-venv \
+        python3.12 python3.12-venv \
         qemu-system-arm qemu-system-misc \
         gcc-riscv64-unknown-elf
-    $ python3.9 -m venv pyenv
+    $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
 
-If you do not have Python 3.9 available, you can get it via the
+If you do not have Python 3.12 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
 To use this:
 
     $ sudo add-apt-repository ppa:deadsnakes/ppa
     $ sudo apt update
-    $ sudo apt install python3.9 python3.9-venv
+    $ sudo apt install python3.12 python3.12-venv
 
 The ARM toolchain is available from:
 
@@ -98,8 +97,8 @@ On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
     $ curl https://sh.rustup.rs -sSf | sh
     $ brew tap riscv-software-src/riscv
     $ brew install riscv-tools
-    $ brew install pandoc cmake dtc ninja libxml2 python@3.9 coreutils texlive qemu
-    $ python3.9 -m venv pyenv
+    $ brew install pandoc cmake dtc ninja libxml2 python@3.12 coreutils texlive qemu
+    $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
 
@@ -141,7 +140,7 @@ Please clone seL4 from:
 
 The correct branch to use is `microkit`.
 
-Testing has been performed using commit `29ee490ec45efe8edc5e02828629b87dcb63d57c`.
+Testing has been performed using commit `4b97df4c7e24fd0c297e21cae8d997a08b8952b0`.
 
 ## Building the SDK
 
@@ -189,6 +188,8 @@ LICENSE.md
 LICENSES/$licence.txt
 doc/
 doc/microkit_user_manual.pdf
+example/
+example/$example/
 bin/
 bin/microkit
 board/
@@ -205,7 +206,10 @@ board/$board/$config/elf/monitor.elf
 
 The currently supported boards are:
 
+* ariane
+* cheshire
 * imx8mm_evk
+* imx8mp_evk
 * imx8mq_evk
 * maaxboard
 * odroidc2
@@ -213,6 +217,7 @@ The currently supported boards are:
 * qemu_virt_aarch64
 * qemu_virt_riscv64
 * rockpro64
+* rpi4b_1gb
 * star64
 * tqma8xqp1gb
 * zcu102

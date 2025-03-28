@@ -4,7 +4,7 @@
 -->
 
 ---
-title: Microkit User Manual (v1.4.1-dev)
+title: Microkit User Manual (v2.0.1-dev)
 documentclass: article
 classoption:
 - english
@@ -86,6 +86,8 @@ The [Board Support Packages](#bsps) chapter describes each of the board support 
 
 The [Rationale](#rationale) chapter documents the rationale for some of the key design choices of in Microkit.
 
+The [Internals](#internals) chapter documents some of the internal details for how Microkit works.
+
 # Concepts {#concepts}
 
 This chapter describes the key concepts provided by Microkit.
@@ -131,11 +133,17 @@ A process on a typical operating system will have a `main` function which is inv
 When the `main` function returns the process is destroyed.
 
 By comparison a protection domain has up to four entry points:
+
 * `init`, `notified` which are required.
 * `protected` which is optional.
 *  `fault` which is required if the PD has children.
 
 When a Microkit system is booted, all PDs in the system execute the `init` entry point.
+
+A PD will not execute any other entry point until `init` has finished.
+
+If a PD is currently executing an entry point, it will not execute any other entry point
+until the current entry point has finished.
 
 The `notified` entry point will be invoked whenever the protection domain receives a *notification* on a *channel*.
 The `protected` entry point is invoked when a PD's *protected procedure* is called by another PD.
@@ -163,7 +171,7 @@ The PD has a number of scheduling attributes that are configured in the system d
 The budget and period bound the fraction of CPU time that a PD can consume.
 Specifically, the **budget** specifies the amount of time for which the PD is allowed to execute.
 Once the PD has consumed its budget, it is no longer runnable until the budget is replenished; replenishment happens once every **period** and resets the budget to its initial value.
-This means that the maximum fraction of CPU time the PD can consume is budget/period.
+This means that the maximum fraction of CPU time the PD can consume is $\frac{budget}{period}$.
 
 The budget cannot be larger than the period.
 A budget that equals the period (aka. a "full" budget) behaves like a traditional time slice: After executing for a full period, the PD is preempted and put at the end of the scheduling queue of its priority. In other words, PDs with equal priorities and full budgets are scheduled round-robin with a time slice defined by the period.
@@ -171,9 +179,9 @@ A budget that equals the period (aka. a "full" budget) behaves like a traditiona
 The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points has been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
-The **passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
+**Passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
 
-## Virtual Machine {#vm}
+## Virtual Machines {#vm}
 
 A *virtual machine* (VM) is a runtime abstraction for running guest operating systems in Microkit. It is similar
 to a protection domain in that it provides a thread of control that executes within an isolated virtual address space.
@@ -241,7 +249,7 @@ Similarly, **B** can refer to **A** via the channel identifier **42**.
 
 The system supports a maximum of 63 channels and interrupts per protection domain.
 
-### Protected procedure {#pp}
+### Protected procedures {#pp}
 
 A protection domain may provide a *protected procedure* (PP) which can be invoked from another protection domain.
 Up to 64 words of data may be passed as arguments when calling a protected procedure.
@@ -271,10 +279,10 @@ A *message* structure is returned from this function.
 When a PD's protected procedure is invoked, the `protected` entry point is invoked with the channel identifier and message structure passed as arguments.
 The `protected` entry point must return a message structure.
 
-### Notification {#notification}
+### Notifications {#notification}
 
 A notification is a (binary) semaphore-like synchronisation mechanism.
-A PD can *notify* another PD to indicate availability of data in a shared memory region if they share a channel.
+For example, a PD can *notify* another PD to indicate availability of data in a shared memory region if they share a channel.
 
 To notify another PD, a PD calls `microkit_notify`, passing the channel identifier.
 When a PD receives a notification, the `notified` entry point is invoked with the appropriate channel identifier passed as an argument.
@@ -285,7 +293,12 @@ Unlike protected procedures, notifications can be sent in either direction on a 
 If a PD notifies another PD, that PD will become scheduled to run (if it is not already), but the current PD does **not** block.
 Of course, if the notified PD has a higher priority than the current PD, then the current PD will be preempted (but not blocked) by the other PD.
 
-## Interrupt {#irq}
+Depending on the scheduling, one PD could notify another multiple times without it being scheduled, resulting
+in a single execution of the `notified` entry point. For example, if PD A notifies PD B three times on the
+same channel without PD B ever executing, once PD B is scheduled it would only see one notification and hence
+only enter `notified` once for that channel.
+
+## Interrupts {#irq}
 
 Hardware interrupts can be used to notify a protection domain.
 The system description specifies if a protection domain receives notifications for any hardware interrupt sources.
@@ -299,17 +312,21 @@ Microkit does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
 
-## Fault {#fault}
+## Faults {#fault}
 
 Faults such as an invalid memory access or illegal instruction are delivered to the seL4 kernel which then forwards them to
-a designated 'fault handler'. By default, all faults caused by protection domains go to the system fault handler which simply prints out
-details about the fault in a debug configuration.
+a designated 'fault handler'. By default, all faults caused by protection domains go to the system fault handler which
+simply prints out details about the fault in a debug configuration.
 
 When a protection domain is a child of another protection domain, the designated fault handler for the child is the parent
 protection domain. The same applies for a virtual machine.
 
 This means that whenever a fault is caused by a child, it will be delivered to the parent PD instead of the system fault
 handler via the `fault` entry point. It is then up to the parent to decide how the fault is handled.
+
+The default system fault handler (aka the monitor) has the highest priority and so will
+execute and handle faults immediately after they occur. For child PDs that have their faults
+delivered to another PD, the fault being handled depends on when the parent PD is scheduled.
 
 # SDK {#sdk}
 
@@ -331,7 +348,7 @@ Additionally, for each supported board configuration the following are provided:
 * `kernel.elf`
 * `monitor.elf`
 
-For some boards there are also examples provided in the `examples` directory.
+There are also examples provided in the `example` directory.
 
 The Microkit SDK does **not** provide, nor require, any specific build system.
 The user is free to build their system using whatever build system is deemed most appropriate for their specific use case.
@@ -359,7 +376,7 @@ and is intended to be removed once [RFC-16 is implemented](https://github.com/se
 
 ## System Requirements
 
-The Microkit tool requires Linux (x86-64), macOS (x86-64 or AArch64).
+The Microkit tool requires Linux (x86-64 or AArch64), macOS (x86-64 or AArch64).
 
 On Linux, the Microkit tool is statically linked and should run on any distribution.
 
@@ -395,6 +412,16 @@ The report is a plain text file describing important information about the syste
 The report can be useful when debugging potential system problems.
 This report does not have a fixed format and may change between versions.
 It is not intended to be machine readable.
+
+# Language Support
+
+There are native APIs for C/C++ and Rust.
+
+[libmicrokit](#libmicrokit) exports a C API and so can be used in any language
+that supports C FFI.
+
+For Rust, native bindings exist but are not included in the SDK itself. They are
+available at [rust-sel4](https://github.com/seL4/rust-sel4).
 
 # libmicrokit {#libmicrokit}
 
@@ -664,6 +691,7 @@ The `map` element has the following attributes:
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), `w` (write), and `x` (eXecute), with the exception of a write-only mapping (just `w`).
 * `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
 * `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
+* `setvar_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the memory region.
 
 The `irq` element has the following attributes:
 
@@ -742,6 +770,85 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 
 This chapter describes the board support packages that are available in the SDK.
 
+## Ariane (CVA6)
+
+Initial support is available for the CVA6 (formerly Ariane) core design
+on the Digilent Genesys2 board. CVA6 is an open-source RISC-V (rv64i) processor.
+
+Microkit support expects that a compatible RISC-V SBI (e.g OpenSBI) has executed before
+jumping to the beginning of the loader image.
+
+Note that the loader link address is 0x90000000 and this is where the binary must
+be located and where OpenSBI (or U-Boot) should begin execution.
+
+You may compile OpenSBI with the Microkit image as a payload, or alternately install
+OpenSBI (with U-Boot optionally) to the SD card.
+
+If you are booting from U-Boot, use the following command to start the system image:
+    => go 0x90000000
+
+Note that the OpenSBI version from the CVA6 SDK at the time of writing has issues when
+booting. It is recommended to use the mainline OpenSBI.
+
+## Cheshire
+
+Support is available for [Cheshire](https://github.com/pulp-platform/cheshire).
+It is an SoC design based on the CVA6 core, implementing a 64-bit RISC-V CPU.
+
+Microkit outputs a raw binary for this device. Several steps are required in order to boot.
+
+A custom version of OpenSBI is required. It can be found
+[here](https://github.com/pulp-platform/opensbi/tree/cheshire).
+Build the firmware payload using platform `fpga/cheshire`.
+
+### Using U-Boot
+
+With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-boot:
+
+    => go 0x90000000
+
+### Raw systerm with no bootloader
+
+Without any firmware present on the SD card, it is still possible to boot Cheshire with a Microkit system.
+
+Using a GDB prompt via openOCD:
+
+1. Reset board
+
+    => monitor reset halt
+
+2. Load a device tree blob (DTS available in Cheshire repo or seL4) to memory and set the a0 and a1 registers to point at it:
+
+    > restore /path/to/cheshire.dtb binary 0xa0000000
+
+(tell OpenSBI where DTB is)
+
+    > set $a0=0xa0000000
+
+(tell OpenSBI that the default hart is #0)
+
+    > set $a1=0
+
+3. Load OpenSBI
+
+    > load /path/to/opensbi/fw_payload.elf
+
+4. Allow OpenSBI to boot, and interrupt it once the line `Test payload running` is emitted on serial.
+
+    > continue
+
+(wait for output)
+
+    > (Ctrl+C)
+
+5. Load Microkit image and execute
+
+    > restore /path/to/loader.img binary 0x90000000
+
+(execute)
+
+    > continue
+
 ## i.MX8MM-EVK
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
@@ -785,6 +892,94 @@ The HardKernel Odroid-C4 is an ARM SBC based on the Amlogic Meson S905X3 system-
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x20000000
+
+## QEMU virt (AArch64)
+
+Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based
+on any specific SoC or hardware platform and is intended for simulating systems for
+development or testing.
+
+It should be noted that the platform support is configured with 2GB of main memory and a single
+Cortex-A53 CPU.
+
+You can use the following command to simulate a Microkit system:
+
+    $ qemu-system-aarch64 \
+        -machine virt,virtualization=on \
+        -cpu cortex-a53 \
+        -nographic \
+        -serial mon:stdio \
+        -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0 \
+        -m size=2G
+
+You can find more about the QEMU virt platform in the
+[QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
+
+## QEMU virt (RISC-V 64-bit)
+
+Support is available for the virtual RISC-V (64-bit) QEMU platform.
+This is a platform that is not based on any specific SoC or hardware platform
+and is intended for simulating systems for development or testing.
+
+It should be noted that the platform support is configured with 2GB of main memory.
+
+You can use the following command to simulate a Microkit system:
+
+    $ qemu-system-riscv64 \
+        -machine virt \
+        -nographic \
+        -serial mon:stdio \
+        -kernel [SYSTEM IMAGE] \
+        -m size=2G
+
+QEMU will start the system image using its packaged version of OpenSBI.
+
+You can find more about the QEMU virt platform in the
+[QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
+
+## Raspberry Pi 4B
+
+Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
+Rasberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
+If you require more than 1GB, please file an issue or pull request to add support for
+models with larger amounts of memory.
+
+For initial board setup, please see the instructions on the
+[seL4 website](https://docs.sel4.systems/Hardware/Rpi4.html).
+
+When getting into the U-Boot console you want to load the Microkit binary image to
+address 0x10000000 and then run `go 0x10000000`.
+
+For example, if you were to load the image via the MMC you would run the following
+U-Boot commands:
+
+     => fatload mmc 0 0x10000000 <SYSTEM IMAGE>
+     => go 0x10000000
+
+## Pine64 ROCKPro64
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x30000000
+
+## Pine64 Star64
+
+Support is available for the Pine64 Star64 platform which is based on the
+StarFive JH7110 SoC.
+
+The platform has a 4GB and 8GB model, we assume the 4GB model.
+
+The default boot flow of the Star64 is:
+1. OpenSBI
+2. U-Boot
+3. Operating System
+
+This means that the system image that Microkit produces does not need to be explicitly
+packaged with an SBI implementation such as OpenSBI.
+
+To execute the system image produced by Microkit, execute the following command in U-Boot:
+
+    => go 0x60000000
 
 ## TQMa8XQP 1GB
 
@@ -848,80 +1043,7 @@ Rather than typing these each time you can create a U-Boot script:
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
 
-## QEMU virt (AArch64)
-
-Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based
-on any specific SoC or hardware platform and is intended for simulating systems for
-development or testing.
-
-It should be noted that the platform support is configured with 2GB of main memory and a single
-Cortex-A53 CPU.
-
-You can use the following command to simulate a Microkit system:
-
-    $ qemu-system-aarch64 \
-        -machine virt,virtualization=on \
-        -cpu cortex-a53 \
-        -nographic \
-        -serial mon:stdio \
-        -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0 \
-        -m size=2G
-
-You can find more about the QEMU virt platform in the
-[QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
-
-## QEMU virt (RISC-V 64-bit)
-
-Support is available for the virtual RISC-V (64-bit) QEMU platform.
-This is a platform that is not based on any specific SoC or hardware platform
-and is intended for simulating systems for development or testing.
-
-It should be noted that the platform support is configured with 2GB of main memory.
-
-You can use the following command to simulate a Microkit system:
-
-    $ qemu-system-riscv64 \
-        -machine virt \
-        -nographic \
-        -serial mon:stdio \
-        -kernel [SYSTEM IMAGE] \
-        -m size=2G
-
-QEMU will start the system image using its packaged version of OpenSBI.
-
-You can find more about the QEMU virt platform in the
-[QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
-
-## Pine64 ROCKPro64
-
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
-
-    => go 0x30000000
-
-## Pine64 Star64
-
-Support is available for the Pine64 Star64 platform which is based on the
-StarFive JH7110 SoC.
-
-The platform has a 4GB and 8GB model, we assume the 4GB model.
-
-The default boot flow of the Star64 is:
-1. OpenSBI
-2. U-Boot
-3. Operating System
-
-This means that the system image that Microkit produces does not need to be explicitly
-packaged with an SBI implementation such as OpenSBI.
-
-To execute the system image produced by Microkit, execute the following command in U-Boot:
-
-    => go 0x60000000
-
 ## ZCU102
-
-Initial support is available for the Xilinx ZCU102.
-
-**FIXME:** Additional documentation required here.
 
 The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.
 
@@ -1034,3 +1156,121 @@ Based on experience with the system and the types of systems being built it is p
 The limitation on the number of channels for a protection domain is based on the size of the notification word in seL4.
 Changing this to be larger than 64 would most likely require changes to seL4. The reason for why the limit is not a
 power of two is due to part of the notification word being for internal libmicrokit use.
+
+# Internals
+
+The following section describes internal details for how the Microkit works
+and all the components of Microkit. As a user of Microkit, it is not necessary
+know this information, however, there is no harm in having a greater
+understanding of the tools that you are using.
+
+![Microkit flow](assets/microkit_flow.pdf)
+
+The diagram above aims to show the general flow of a Microkit system from
+build-time to run-time.
+
+The user provides the SDF (System Description File) and the ELFs that
+correspond to PD program images to the Microkit tool which is responsible to
+for packaging everything together into a single bootable image for the target
+platform.
+
+This final image contains a couple different things:
+
+* the Microkit loader
+* seL4
+* the Monitor (and associated invocation data)
+* the images for all the user's PDs
+
+When booting the image, the Microkit loader starts, jumps to the kernel, which
+starts the monitor, which then sets up the entire system and starts all the PDs.
+
+Now, we will go into a bit more detail about each of these stages of the
+booting process as well as what exactly the Microkit tool is doing.
+
+## Loader
+
+The loader starts first, it has two main jobs:
+
+1. Unpack all the parts of the system (kernel, monitor, PD images, etc) into
+   their expected locations within main memory.
+2. Finish initialising the hardware such that the rest of the system can start.
+
+Unpacking the system image is fairly straight-forward, as all the information
+about what parts of the system image need to go where is figured out by the
+tool and embedded into the loader at build-time so when it starts it just goe
+through an array and copies data into the right locations.
+
+Before the Microkit loader starts, there would most likely have been some other
+bootloader such as U-Boot or firmware on the target that did its own hardware
+initialisation before starting Microkit.
+
+However, there are certain things that seL4 expects to be initialised
+that will not be done by a previous booting stage, such as:
+
+* changing to the right exception level
+* enabling the MMU (seL4 expects the MMU to be on when it starts)
+* interrupt controller setup
+
+Once this is all completed, the loader jumps to seL4 which starts executing.
+The loader will never be executed again.
+
+## Monitor
+
+Once the kernel has done its own initialisation, it will begin the
+'initial task'. On seL4, this is a thread that contains all the initial
+capabilities to resources that are used to setup the rest of the system.
+
+Within a Microkit environment, we call the initial task the 'monitor'.
+
+The monitor has two main jobs:
+
+1. Setup all system resources (memory regions, channels, interrupts) and start
+   the user's protection domains.
+2. Receive any faults caused by protection domains crashing or causing
+   exceptions.
+
+At build-time, the Microkit tool embeds all the system calls that the monitor
+needs to make in order to setup the user's system. More details about *how*
+this is done is in the section on the Microkit tool below. But from the
+monitor's perspective, it just iterates over an array of system calls to make
+and performs each one.
+
+After the system has been setup, the monitor goes to sleep and waits for any
+faults from protection domains. On debug mode, this results in a message about
+which PD caused an exception and details on the PD's state at the time of the fault.
+
+Other than printing fault details, the monitor does not do anything to handle
+the fault, it will simply go back to sleep waiting for any other faults.
+
+## libmicrokit
+
+Unlike the previous sections, libmicrokit is not its own program but it is worth
+a mention since it makes up the core of each protection domain in a system.
+
+When each PD starts, we enter libmicrokit's starting point which does some initial
+setup and calls the `init` entry point specified by the user. Once that completes,
+the PD will enter libmicrokit's event handler which sleeps until it receives events.
+
+These events could be notifies (from other PDs or from an interrupt), PPCs, and faults.
+For each event, the appropriate user-specified entry point is called and then when it
+returns the PD goes back to sleep, waiting on any more events.
+
+## Microkit tool
+
+The Microkit tool's ultimate job is to take in the description of the user's system,
+the SDF, and convert into an seL4 system that boots and executes.
+
+There are obvious steps such as parsing the SDF and PD ELFs but the majority of
+the work done by the tool is converting the system description into a list of
+seL4 system calls that need to happen.
+
+In order to do this however, the Microkit tool needs to perform o a decent amount of
+'emulation' to know exactly what system calls and with which arguments to make.
+This requires keeping track of what memory is allocated and where, the layout of
+each capability space, what the initial untypeds list will look like, etc.
+
+While this is non-trivial to do, it comes with the useful property that if the tool
+produces a valid image, there should be no errors upon initialising the system
+If there are any errors with configuring the system (e.g running out of memory),
+they will be caught at build-time. This can only reasonably be done due to the
+static-architecture of Microkit systems.
