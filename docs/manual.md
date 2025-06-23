@@ -635,13 +635,14 @@ The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source c
 
 ## `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
 
-This API is available only on ARM and only when seL4 has been configured to enable the
-`KernelAllowSMCCalls` option.
-
 The API takes in arguments for a Secure Monitor Call which will be performed by seL4. Any
 response values will be placed into the `response` structure.
 
 The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
+
+Note that this API is only available when the PD making the call has been configured to
+have SMC enabled in the SDF. Note that when the kernel makes the actual SMC, it cannot
+pre-empt the Secure Monitor and therefore any kernel WCET properties are no longer guaranteed.
 
 # System Description File {#sysdesc}
 
@@ -671,7 +672,7 @@ It supports the following attributes:
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
 * `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 4KiB.
-* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform. Only available when the kernel has been configured with `KernelAllowSMCCalls`. Defaults to false.
+* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
 
 Additionally, it supports the following child elements:
 
@@ -720,7 +721,7 @@ Additionally, it supports the following child elements:
 * `vcpu`: (one or more) Describes the virtual CPU that will be tied to the virtual machine.
 * `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
 
-The `vcpu` element has a single `id` attribute defining the identifier used for the virutal machine's vCPU.
+The `vcpu` element has a single `id` attribute defining the identifier used for the virtual machine's vCPU.
 
 The `map` element has the same attributes as the protection domain with the exception of `setvar_vaddr`.
 
@@ -940,7 +941,7 @@ You can find more about the QEMU virt platform in the
 ## Raspberry Pi 4B
 
 Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
-Rasberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
+Raspberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
 If you require more than 1GB, please file an issue or pull request to add support for
 models with larger amounts of memory.
 
@@ -1042,6 +1043,17 @@ Rather than typing these each time you can create a U-Boot script:
     => run microkit
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
+
+## Ultra96V2
+
+To run the built image on the board, you have to use properly patched U-Boot - please see the section for ZCU102, for the details.
+
+You have to load the binary file into memory and run it:
+```
+ZynqMP> tftpboot 0x40000000 loader.img
+...
+ZynqMP> go 0x40000000
+```
 
 ## ZCU102
 

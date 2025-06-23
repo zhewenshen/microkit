@@ -28,7 +28,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 #define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
 
-#if defined(BOARD_zcu102)
+#if defined(BOARD_zcu102) || defined(BOARD_ultra96v2)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
 #elif defined(BOARD_qemu_virt_aarch64)
@@ -240,6 +240,23 @@ static void putc(uint8_t ch)
     while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
     *UART_REG(UART_WFIFO) = ch;
 }
+#elif defined(BOARD_ultra96v2)
+/* Use UART1 available through USB-to-JTAG/UART pod */
+#define UART_BASE 0x00ff010000
+#define R_UART_CHANNEL_STS          0x2C
+#define UART_CHANNEL_STS_TXEMPTY    0x08
+#define UART_CHANNEL_STS_TACTIVE    0x800
+#define R_UART_TX_RX_FIFO           0x30
+
+static void uart_init(void) {}
+
+static void putc(uint8_t ch)
+{
+    while (!(*UART_REG(R_UART_CHANNEL_STS) & UART_CHANNEL_STS_TXEMPTY)) {};
+    while (*UART_REG(R_UART_CHANNEL_STS) & UART_CHANNEL_STS_TACTIVE) {};
+
+    *((volatile uint32_t *)(UART_BASE + R_UART_TX_RX_FIFO)) = ch;
+}
 #elif defined(BOARD_qemu_virt_aarch64)
 #define UART_BASE                 0x9000000
 #define PL011_TCR                 0x030
@@ -373,7 +390,7 @@ static void puthex(uintptr_t val)
 #endif
 }
 
-/* Returns the current execption level */
+/* Returns the current exception level */
 static enum el current_el(void)
 {
     /* See: C5.2.1 CurrentEL */
@@ -513,7 +530,7 @@ static char *ec_to_string(uintptr_t ec)
  *
  * This doesn't *do anything*. It helps when
  * debugging to verify that the data structures are
- * being interpretted correctly by the loader.
+ * being interpreted correctly by the loader.
  */
 static void print_flags(void)
 {
@@ -639,7 +656,7 @@ static void start_kernel(void)
     );
 }
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_virt_aarch64)
+#if defined(BOARD_zcu102) || defined(BOARD_ultra96v2) || defined(BOARD_qemu_virt_aarch64)
 static void configure_gicv2(void)
 {
     /* The ZCU102 start in EL3, and then we drop to EL1(NS).
@@ -746,7 +763,7 @@ int main(void)
      */
     copy_data();
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_virt_aarch64)
+#if defined(BOARD_zcu102) || defined(BOARD_ultra96v2) || defined(BOARD_qemu_virt_aarch64)
     configure_gicv2();
 #endif
 

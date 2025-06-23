@@ -140,7 +140,7 @@ Please clone seL4 from:
 
 The correct branch to use is `microkit`.
 
-Testing has been performed using commit `4b97df4c7e24fd0c297e21cae8d997a08b8952b0`.
+Testing has been performed using commit `3aafe9e0b9527794c547d12090117e1000302da0`.
 
 ## Building the SDK
 
@@ -169,7 +169,7 @@ By default `dev_build.py` will use the the Microkit tool directory from source (
 However, in some cases it is desirable to test the Microkit tool built into the SDK.
 In this case pass `--tool-from-sdk` to use the tool that is built into the SDK.
 
-Finally, by default the `dev_build.py` script relies on the default Makefile dependecy resolution.
+Finally, by default the `dev_build.py` script relies on the default Makefile dependency resolution.
 However, in some cases it is useful to force a rebuild while doing SDK development.
 For example, the `Makefile` can't know about the state of the Microkit tool source code.
 To support this a `--rebuild` option is provided.
@@ -220,6 +220,7 @@ The currently supported boards are:
 * rpi4b_1gb
 * star64
 * tqma8xqp1gb
+* ultra96v2
 * zcu102
 
 The currently supported configurations are:

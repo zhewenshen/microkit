@@ -64,6 +64,9 @@ class KernelArch(IntEnum):
         else:
             raise Exception(f"Unsupported arch {self}")
 
+    def as_kernel_arch_config(self) -> tuple[str, str]:
+        return ("KernelSel4Arch", self.to_str())
+
 
 @dataclass
 class BoardInfo:
@@ -93,6 +96,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -107,6 +111,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -120,6 +125,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -133,6 +139,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -146,6 +153,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -159,6 +167,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -172,6 +181,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -185,6 +195,22 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
+        },
+    ),
+    BoardInfo(
+        name="ultra96v2",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options={
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "ultra96v2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -201,6 +227,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmExportPTMRUser": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -227,7 +254,8 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
-            "RPI4_MEMORY": 1024
+            "RPI4_MEMORY": 1024,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -241,6 +269,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -403,7 +432,11 @@ def build_sel4(
 
     print(f"Building sel4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
 
-    config_args = list(board.kernel_options.items()) + list(config.kernel_options.items())
+    config_args = [
+        *board.kernel_options.items(),
+        *config.kernel_options.items(),
+        board.arch.as_kernel_arch_config(),
+    ]
     config_strs = []
     for arg, val in sorted(config_args):
         if isinstance(val, bool):
