@@ -35,7 +35,7 @@ CFLAGS := -std=gnu11 \
 		  -Iinclude -I$(SEL4_SDK)/include \
 		  $(CFLAGS_ARCH)
 
-MAIN_PNK = main.🥞 util.🥞
+MAIN_PNK = src/main.🥞 src/util.🥞
 
 CC_IS_CLANG := $(shell $(TOOLCHAIN)gcc --version 2>/dev/null | grep -q clang && echo yes || echo no)
 
@@ -59,7 +59,7 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 $(BUILD_DIR)/%.o : src/%.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/pancake_ffi.o: pancake_ffi.c
+$(BUILD_DIR)/pancake_ffi.o: src/pancake_ffi.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/main_pnk.S: $(MAIN_PNK)
