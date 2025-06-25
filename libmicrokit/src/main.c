@@ -63,57 +63,7 @@ static void run_init_funcs(void)
     }
 }
 
-#define MEMORY_CHECK_PATTERN 0xDEADBEEF
-#define MEMORY_CHECK_SIZE 1024*10
-
-void microkit_check_pancake_mem();
-
-static void handler_loop(void)
-{
-    bool have_reply = false;
-    seL4_MessageInfo_t reply_tag;
-
-    for (;;) {
-        seL4_Word badge;
-        seL4_MessageInfo_t tag;
-
-        if (have_reply) {
-            tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
-        } else if (microkit_have_signal) {
-            tag = seL4_NBSendRecv(microkit_signal_cap, microkit_signal_msg, INPUT_CAP, &badge, REPLY_CAP);
-            microkit_have_signal = seL4_False;
-        } else {
-            tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
-        }
-
-        uint64_t is_endpoint = badge >> 63;
-        uint64_t is_fault = (badge >> 62) & 1;
-
-        have_reply = false;
-
-        if (is_fault) {
-            seL4_Bool reply_to_fault = fault(badge & PD_MASK, tag, &reply_tag);
-            if (reply_to_fault) {
-                have_reply = true;
-            }
-        } else if (is_endpoint) {
-            have_reply = true;
-            reply_tag = protected(badge & CHANNEL_MASK, tag);
-        } else {
-            unsigned int idx = 0;
-            do  {
-                if (badge & 1) {
-                    notified(idx);
-                }
-                badge >>= 1;
-                idx++;
-            } while (badge != 0);
-        }
-        
-        // check we are not corrupting the pancake memory
-        microkit_check_pancake_mem();
-    }
-}
+extern void handler_loop();
 
 extern void *microkit_cml_heap;
 extern void *microkit_cml_stack;
@@ -147,36 +97,99 @@ void microkit_init_pancake_mem() {
     microkit_cml_heap = microkit_cml_memory;
     microkit_cml_stack = microkit_cml_heap + microkit_cml_heap_sz;
     microkit_cml_stackend = microkit_cml_stack + microkit_cml_stack_sz;
+}
+
+/* Sync function to keep global microkit_have_signal and pancake memory in sync */
+void microkit_sync_have_signal(void) {
+    if (microkit_cml_heap) {
+        uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+        pnk_mem[0] = microkit_have_signal;
+    }
+}
+
+/* FFI function for seL4_Recv - writes tag and badge to memory */
+void ffimicrokit_recv(unsigned char *c, long clen, unsigned char *a, long alen) {
+    seL4_Word badge;
+    seL4_MessageInfo_t tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
     
-    for (int i = 0; i < MEMORY_CHECK_SIZE; i++) {
-        microkit_cml_memory[i] = (char)(MEMORY_CHECK_PATTERN >> (8 * (i % 4)));
-    }
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    
+    pnk_mem[clen] = badge;
+    pnk_mem[alen] = *(seL4_Word*)&tag;  // Just cast it directly
 }
 
-void microkit_check_pancake_mem() {
-    microkit_dbg_puts("Checking pancake memory for corruption\n");
-    for (int i = 0; i < MEMORY_CHECK_SIZE; i++) {
-        char expected = (char)(MEMORY_CHECK_PATTERN >> (8 * (i % 4)));
-        if (microkit_cml_memory[i] != expected) {
-            microkit_dbg_puts("ERROR: Pancake memory corruption detected at byte ");
-            char byte_str[2];
-            byte_str[0] = '0' + i;
-            byte_str[1] = '\0';
-            microkit_dbg_puts(byte_str);
-            microkit_dbg_puts("\n");
-            return;
-        }
-    }
-    microkit_dbg_puts("Pancake memory check passed\n");
+/* FFI function for seL4_ReplyRecv - writes tag and badge to memory */
+void ffimicrokit_reply_recv(unsigned char *c, long clen, unsigned char *a, long alen) {
+    seL4_Word badge;
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    
+    // Read reply_tag from memory (passed via clen)
+    seL4_MessageInfo_t reply_tag = *(seL4_MessageInfo_t*)&pnk_mem[clen];
+    seL4_MessageInfo_t tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
+    
+    // Write results to memory (alen = tag_addr, a = badge_addr)
+    pnk_mem[alen] = *(seL4_Word*)&tag;
+    pnk_mem[(uintptr_t)a] = badge;
 }
 
-extern void microkit_hello(void);
+/* FFI function for seL4_NBSendRecv - writes tag and badge to memory */
+void ffimicrokit_nb_send_recv(unsigned char *c, long clen, unsigned char *a, long alen) {
+    seL4_Word badge;
+    seL4_MessageInfo_t tag = seL4_NBSendRecv(microkit_signal_cap, microkit_signal_msg, INPUT_CAP, &badge, REPLY_CAP);
+    
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    
+    pnk_mem[clen] = badge;
+    pnk_mem[alen] = *(seL4_Word*)&tag;
+    
+    // Clear the signal flag
+    microkit_have_signal = seL4_False;
+    uintptr_t *pnk_mem_sync = (uintptr_t *)microkit_cml_heap;
+    pnk_mem_sync[0] = seL4_False;
+}
+
+/* FFI function to call fault handler - writes reply info to memory */
+void ffimicrokit_fault_handler(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    
+    // clen = child, alen = tag from memory, c = reply_tag_addr, a = should_reply_addr
+    microkit_child child = clen;
+    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];
+    seL4_MessageInfo_t reply_tag;
+    
+    seL4_Bool should_reply = fault(child, msginfo, &reply_tag);
+    
+    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;
+    pnk_mem[(uintptr_t)a] = should_reply;
+}
+
+/* FFI function to call protected handler - writes reply tag to memory */
+void ffimicrokit_protected_handler(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    
+    // clen = channel, alen = tag from memory, c = reply_tag_addr
+    microkit_channel channel = clen;
+    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];
+    
+    seL4_MessageInfo_t reply_tag = protected(channel, msginfo);
+    
+    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;
+}
+
+/* FFI function to call notified handler */
+void ffimicrokit_notified_handler(unsigned char *c, long clen, unsigned char *a, long alen) {
+    notified(clen);
+}
 
 void main(void)
 {
     run_init_funcs();
     init();
 
+    microkit_init_pancake_mem();
+
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    
     /*
      * If we are passive, now our initialisation is complete we can
      * signal the monitor to unbind our scheduling context and bind
@@ -185,19 +198,15 @@ void main(void)
      */
     if (microkit_passive) {
         microkit_have_signal = seL4_True;
+        pnk_mem[0] = seL4_True;
         microkit_signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
         microkit_signal_cap = MONITOR_EP;
+    } else {
+        microkit_have_signal = seL4_False;
+        pnk_mem[0] = seL4_False;
     }
 
-    microkit_init_pancake_mem();
-
-    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
-    // we will set microkit_have_signal to the 0th slot
-    pnk_mem[0] = microkit_have_signal;
-
     microkit_cml_main();
-
-    microkit_hello();
 
     handler_loop();
 }

@@ -1,29 +1,42 @@
 #define PD_MASK 255
 #define CHANNEL_MASK 63
 
-export fun pnk_handler_loop() {
+#define BADGE_ADDR 500
+#define TAG_ADDR 501
+#define HAVE_SIGNAL_ADDR 502
+#define SHOULD_REPLY_ADDR 503
+#define REPLY_TAG_ADDR 504
+
+#define HAVE_SIGNAL_MEM 0
+
+export fun handler_loop() {
     var have_reply = false;
     var reply_tag = 0;
 
     while (true) {
-        var badge_addr = @base + 500 * @biw; 
+        var badge_addr = @base + BADGE_ADDR * @biw; 
+        var tag_addr = @base + TAG_ADDR * @biw;
+        var have_signal_addr = @base + HAVE_SIGNAL_ADDR * @biw;
+        var should_reply_addr = @base + SHOULD_REPLY_ADDR * @biw;
+        var reply_tag_addr = @base + REPLY_TAG_ADDR * @biw;
+        var have_signal_mem_addr = @base + HAVE_SIGNAL_MEM * @biw;
         var tag = 0;
 
-        var microkit_have_signal = false;
+        var microkit_have_signal = lds 1 have_signal_mem_addr;
+
         if (have_reply) {
-            tag = 0;
-            @microkit_hello_pancake(0,0,0,0);
+            !stw reply_tag_addr, reply_tag;
+            @microkit_reply_recv(0, REPLY_TAG_ADDR, BADGE_ADDR, TAG_ADDR);
         } else {
             if (microkit_have_signal) {
-                tag = 0;
-                @microkit_hello_pancake(0,0,0,0);
+                @microkit_nb_send_recv(0, BADGE_ADDR, 0, TAG_ADDR);
             } else {
-                tag = 0;
-                @microkit_hello_pancake(0,0,0,0);
+                @microkit_recv(0, BADGE_ADDR, 0, TAG_ADDR);
             }
         }
 
         var badge = lds 1 badge_addr;
+        tag = lds 1 tag_addr;
 
         var is_endpoint = badge >> 63;
         var is_fault = (badge >> 62) & 1;
@@ -31,29 +44,30 @@ export fun pnk_handler_loop() {
         have_reply = false;
 
         if (is_fault) {
-            var reply_to_fault = 0;
-            @microkit_hello_pancake(0,0,0,0);
-
+            var child = badge & PD_MASK;
+            @microkit_fault_handler(REPLY_TAG_ADDR, child, SHOULD_REPLY_ADDR, TAG_ADDR);
+            
+            var reply_to_fault = lds 1 should_reply_addr;
             if (reply_to_fault) {
                 have_reply = true;
+                reply_tag = lds 1 reply_tag_addr;
+            }
+        } else {
+            if (is_endpoint) {
+                var channel = badge & CHANNEL_MASK;
+                @microkit_protected_handler(REPLY_TAG_ADDR, channel, 0, TAG_ADDR);
+                have_reply = true;
+                reply_tag = lds 1 reply_tag_addr;
             } else {
-                if (is_endpoint) {
-                    have_reply = true;
-                    reply_tag = 0;
-                    @microkit_hello_pancake(0,0,0,0);
-                } else {
-                    var idx = 0;
+                var idx = 0;
 
-                    while (true) {
-                        if (badge & 1) {
-                            @microkit_hello_pancake(0,idx,0,0);
-                        }
-
-                        badge = badge >> 1;
-                        idx = idx + 1;
-
-                        if (badge != 0) { break; }
+                while (badge != 0) {
+                    if (badge & 1) {
+                        @microkit_notified_handler(0, idx, 0, 0);
                     }
+
+                    badge = badge >> 1;
+                    idx = idx + 1;
                 }
             }
         }

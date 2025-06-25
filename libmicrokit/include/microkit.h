@@ -259,6 +259,8 @@ static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMC
 }
 #endif
 
+extern void microkit_sync_have_signal(void);
+
 static inline void microkit_deferred_notify(microkit_channel ch)
 {
     if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_notifications & (1ULL << ch)) == 0) {
@@ -269,6 +271,7 @@ static inline void microkit_deferred_notify(microkit_channel ch)
         return;
     }
     microkit_have_signal = seL4_True;
+    microkit_sync_have_signal();
     microkit_signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
     microkit_signal_cap = (BASE_OUTPUT_NOTIFICATION_CAP + ch);
 }
@@ -283,6 +286,7 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
         return;
     }
     microkit_have_signal = seL4_True;
+    microkit_sync_have_signal();
     microkit_signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
     microkit_signal_cap = (BASE_IRQ_CAP + ch);
 }
