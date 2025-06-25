@@ -63,6 +63,11 @@ static void run_init_funcs(void)
     }
 }
 
+#define MEMORY_CHECK_PATTERN 0xDEADBEEF
+#define MEMORY_CHECK_SIZE 1024*10
+
+void microkit_check_pancake_mem();
+
 static void handler_loop(void)
 {
     bool have_reply = false;
@@ -104,6 +109,9 @@ static void handler_loop(void)
                 idx++;
             } while (badge != 0);
         }
+        
+        // check we are not corrupting the pancake memory
+        microkit_check_pancake_mem();
     }
 }
 
@@ -139,6 +147,27 @@ void microkit_init_pancake_mem() {
     microkit_cml_heap = microkit_cml_memory;
     microkit_cml_stack = microkit_cml_heap + microkit_cml_heap_sz;
     microkit_cml_stackend = microkit_cml_stack + microkit_cml_stack_sz;
+    
+    for (int i = 0; i < MEMORY_CHECK_SIZE; i++) {
+        microkit_cml_memory[i] = (char)(MEMORY_CHECK_PATTERN >> (8 * (i % 4)));
+    }
+}
+
+void microkit_check_pancake_mem() {
+    microkit_dbg_puts("Checking pancake memory for corruption\n");
+    for (int i = 0; i < MEMORY_CHECK_SIZE; i++) {
+        char expected = (char)(MEMORY_CHECK_PATTERN >> (8 * (i % 4)));
+        if (microkit_cml_memory[i] != expected) {
+            microkit_dbg_puts("ERROR: Pancake memory corruption detected at byte ");
+            char byte_str[2];
+            byte_str[0] = '0' + i;
+            byte_str[1] = '\0';
+            microkit_dbg_puts(byte_str);
+            microkit_dbg_puts("\n");
+            return;
+        }
+    }
+    microkit_dbg_puts("Pancake memory check passed\n");
 }
 
 extern void microkit_hello(void);
@@ -161,6 +190,11 @@ void main(void)
     }
 
     microkit_init_pancake_mem();
+
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    // we will set microkit_have_signal to the 0th slot
+    pnk_mem[0] = microkit_have_signal;
+
     microkit_cml_main();
 
     microkit_hello();
