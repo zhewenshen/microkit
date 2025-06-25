@@ -99,12 +99,10 @@ void microkit_init_pancake_mem() {
     microkit_cml_stackend = microkit_cml_stack + microkit_cml_stack_sz;
 }
 
-/* Sync function to keep global microkit_have_signal and pancake memory in sync */
-void microkit_sync_have_signal(void) {
-    if (microkit_cml_heap) {
-        uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
-        pnk_mem[0] = microkit_have_signal;
-    }
+/* FFI function to check if we have a signal to send */
+void ffimicrokit_have_signal(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
+    pnk_mem[clen] = microkit_have_signal;
 }
 
 /* FFI function for seL4_Recv - writes tag and badge to memory */
@@ -123,13 +121,14 @@ void ffimicrokit_reply_recv(unsigned char *c, long clen, unsigned char *a, long 
     seL4_Word badge;
     uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
     
-    // Read reply_tag from memory (passed via clen)
+    // clen = reply_tag_addr, a = badge_addr, alen = tag_addr
+    // Read reply_tag from memory
     seL4_MessageInfo_t reply_tag = *(seL4_MessageInfo_t*)&pnk_mem[clen];
     seL4_MessageInfo_t tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
     
-    // Write results to memory (alen = tag_addr, a = badge_addr)
-    pnk_mem[alen] = *(seL4_Word*)&tag;
-    pnk_mem[(uintptr_t)a] = badge;
+    // Write results to memory
+    pnk_mem[(uintptr_t)a] = badge;     // badge to BADGE_ADDR (500)
+    pnk_mem[alen] = *(seL4_Word*)&tag; // tag to TAG_ADDR (501)
 }
 
 /* FFI function for seL4_NBSendRecv - writes tag and badge to memory */
@@ -144,36 +143,34 @@ void ffimicrokit_nb_send_recv(unsigned char *c, long clen, unsigned char *a, lon
     
     // Clear the signal flag
     microkit_have_signal = seL4_False;
-    uintptr_t *pnk_mem_sync = (uintptr_t *)microkit_cml_heap;
-    pnk_mem_sync[0] = seL4_False;
 }
 
 /* FFI function to call fault handler - writes reply info to memory */
 void ffimicrokit_fault_handler(unsigned char *c, long clen, unsigned char *a, long alen) {
     uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
     
-    // clen = child, alen = tag from memory, c = reply_tag_addr, a = should_reply_addr
+    // c = reply_tag_addr (504), clen = child, a = should_reply_addr (503), alen = tag_addr (501)
     microkit_child child = clen;
-    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];
+    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];  // Read tag from TAG_ADDR
     seL4_MessageInfo_t reply_tag;
     
     seL4_Bool should_reply = fault(child, msginfo, &reply_tag);
     
-    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;
-    pnk_mem[(uintptr_t)a] = should_reply;
+    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;  // Write reply_tag to REPLY_TAG_ADDR
+    pnk_mem[(uintptr_t)a] = should_reply;             // Write should_reply to SHOULD_REPLY_ADDR
 }
 
 /* FFI function to call protected handler - writes reply tag to memory */
 void ffimicrokit_protected_handler(unsigned char *c, long clen, unsigned char *a, long alen) {
     uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
     
-    // clen = channel, alen = tag from memory, c = reply_tag_addr
+    // c = reply_tag_addr (504), clen = channel, a = unused (0), alen = tag_addr (501)
     microkit_channel channel = clen;
-    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];
+    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];  // Read tag from TAG_ADDR
     
     seL4_MessageInfo_t reply_tag = protected(channel, msginfo);
     
-    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;
+    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;  // Write reply_tag to REPLY_TAG_ADDR
 }
 
 /* FFI function to call notified handler */
@@ -187,9 +184,7 @@ void main(void)
     init();
 
     microkit_init_pancake_mem();
-
-    uintptr_t *pnk_mem = (uintptr_t *)microkit_cml_heap;
-    
+        
     /*
      * If we are passive, now our initialisation is complete we can
      * signal the monitor to unbind our scheduling context and bind
@@ -198,12 +193,8 @@ void main(void)
      */
     if (microkit_passive) {
         microkit_have_signal = seL4_True;
-        pnk_mem[0] = seL4_True;
         microkit_signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
         microkit_signal_cap = MONITOR_EP;
-    } else {
-        microkit_have_signal = seL4_False;
-        pnk_mem[0] = seL4_False;
     }
 
     microkit_cml_main();

@@ -7,8 +7,6 @@
 #define SHOULD_REPLY_ADDR 503
 #define REPLY_TAG_ADDR 504
 
-#define HAVE_SIGNAL_MEM 0
-
 export fun handler_loop() {
     var have_reply = false;
     var reply_tag = 0;
@@ -19,10 +17,10 @@ export fun handler_loop() {
         var have_signal_addr = @base + HAVE_SIGNAL_ADDR * @biw;
         var should_reply_addr = @base + SHOULD_REPLY_ADDR * @biw;
         var reply_tag_addr = @base + REPLY_TAG_ADDR * @biw;
-        var have_signal_mem_addr = @base + HAVE_SIGNAL_MEM * @biw;
         var tag = 0;
 
-        var microkit_have_signal = lds 1 have_signal_mem_addr;
+        @microkit_have_signal(0, HAVE_SIGNAL_ADDR, 0, 0);
+        var microkit_have_signal = lds 1 have_signal_addr;
 
         if (have_reply) {
             !stw reply_tag_addr, reply_tag;
