@@ -35,8 +35,20 @@ CFLAGS := -std=gnu11 \
 		  -Iinclude -I$(SEL4_SDK)/include \
 		  $(CFLAGS_ARCH)
 
+MAIN_PNK = main.🥞 util.🥞
+
+CC_IS_CLANG := $(shell $(TOOLCHAIN)gcc --version 2>/dev/null | grep -q clang && echo yes || echo no)
+
+ifeq ($(CC_IS_CLANG),yes)
+    TARGET_FLAG := -target aarch64-none-elf
+else
+    TARGET_FLAG :=
+endif
+
 LIBS := libmicrokit.a
-OBJS := main.o crt0.o dbg.o
+OBJS := main.o crt0.o dbg.o pancake_ffi.o
+
+.DEFAULT_GOAL := all
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(TOOLCHAIN)gcc -x assembler-with-cpp -c $(CFLAGS) $< -o $@
@@ -46,6 +58,18 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 
 $(BUILD_DIR)/%.o : src/%.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
+
+$(BUILD_DIR)/pancake_ffi.o: pancake_ffi.c
+	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
+
+$(BUILD_DIR)/main_pnk.S: $(MAIN_PNK)
+	cat $(MAIN_PNK) | cpp -P | cake --target=arm8 --pancake --main_return=true > $@
+
+$(BUILD_DIR)/main_pnk.o: $(BUILD_DIR)/main_pnk.S
+	$(TOOLCHAIN)gcc -c $(ASM_FLAGS) $(TARGET_FLAG) $< -o $@
+
+$(BUILD_DIR)/main.o: $(BUILD_DIR)/main_pnk.o
+	cp $< $@
 
 LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
 
