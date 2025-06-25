@@ -107,6 +107,42 @@ static void handler_loop(void)
     }
 }
 
+extern void *microkit_cml_heap;
+extern void *microkit_cml_stack;
+extern void *microkit_cml_stackend;
+extern void microkit_cml_main(void);
+
+static char microkit_cml_memory[1024*20];
+
+void microkit_cml_exit(int arg) {
+    microkit_dbg_puts("ERROR! We should not be getting here\n");
+}
+
+void microkit_cml_err(int arg) {
+    if (arg == 3) {
+        microkit_dbg_puts("Memory not ready for entry. You may have not run the init code yet, or be trying to enter during an FFI call.\n");
+    }
+    microkit_cml_exit(arg);
+}
+
+/* Need to come up with a replacement for this clear cache function.
+    Might be worth testing just flushing the entire l1 cache,
+    but might cause issues with returning to this file
+*/
+void microkit_cml_clear() {
+    microkit_dbg_puts("Trying to clear cache\n");
+}
+
+void microkit_init_pancake_mem() {
+    unsigned long microkit_cml_heap_sz = 1024*10;
+    unsigned long microkit_cml_stack_sz = 1024*10;
+    microkit_cml_heap = microkit_cml_memory;
+    microkit_cml_stack = microkit_cml_heap + microkit_cml_heap_sz;
+    microkit_cml_stackend = microkit_cml_stack + microkit_cml_stack_sz;
+}
+
+extern void microkit_hello(void);
+
 void main(void)
 {
     run_init_funcs();
@@ -123,6 +159,11 @@ void main(void)
         microkit_signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
         microkit_signal_cap = MONITOR_EP;
     }
+
+    microkit_init_pancake_mem();
+    microkit_cml_main();
+
+    microkit_hello();
 
     handler_loop();
 }

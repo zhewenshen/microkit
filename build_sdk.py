@@ -765,7 +765,10 @@ def main() -> None:
         source_prefix = Path(f"{NAME}-source-{version}")
         with tar_open(source_tar_file, "w:gz") as tar:
             for filename in filenames:
-                tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
+                # Convert to string to handle Unicode filenames properly
+                filename_str = str(filename)
+                if Path(filename_str).exists():
+                    tar.add(filename_str, arcname=str(source_prefix / filename), filter=tar_filter)
 
 
 if __name__ == "__main__":

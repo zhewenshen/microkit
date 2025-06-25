@@ -46,7 +46,7 @@ else
 endif
 
 LIBS := libmicrokit.a
-OBJS := main.o crt0.o dbg.o pancake_ffi.o
+OBJS := main.o crt0.o dbg.o pancake_ffi.o main_pnk.o
 
 .DEFAULT_GOAL := all
 
@@ -67,9 +67,19 @@ $(BUILD_DIR)/main_pnk.S: $(MAIN_PNK)
 
 $(BUILD_DIR)/main_pnk.o: $(BUILD_DIR)/main_pnk.S
 	$(TOOLCHAIN)gcc -c $(ASM_FLAGS) $(TARGET_FLAG) $< -o $@
-
-$(BUILD_DIR)/main.o: $(BUILD_DIR)/main_pnk.o
-	cp $< $@
+	$(TOOLCHAIN)objcopy --redefine-sym cml_main=microkit_cml_main \
+		--redefine-sym cml_heap=microkit_cml_heap \
+		--redefine-sym cml_stack=microkit_cml_stack \
+		--redefine-sym cml_stackend=microkit_cml_stackend \
+		--redefine-sym cml_exit=microkit_cml_exit \
+		--redefine-sym cml_err=microkit_cml_err \
+		--redefine-sym cml_clear=microkit_cml_clear \
+		--redefine-sym cake_main=microkit_cake_main \
+		--redefine-sym cake_codebuffer_begin=microkit_cake_codebuffer_begin \
+		--redefine-sym cake_codebuffer_end=microkit_cake_codebuffer_end \
+		--redefine-sym cake_bitmaps_buffer_begin=microkit_cake_bitmaps_buffer_begin \
+		--redefine-sym cake_bitmaps_buffer_end=microkit_cake_bitmaps_buffer_end \
+		$@ $@
 
 LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
 
