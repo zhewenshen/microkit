@@ -1,13 +1,6 @@
 #define PD_MASK 255
 #define CHANNEL_MASK 63
 
-export fun microkit_hello() {
-    @microkit_hello_pancake(0,0,0,0);
-
-    return 0;
-}
-
-
 export fun pnk_handler_loop() {
     var have_reply = false;
     var reply_tag = 0;
