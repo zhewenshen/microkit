@@ -10,12 +10,15 @@
 export fun handler_loop() {
     var have_reply = false;
     var reply_tag = 0;
+    
     var badge_addr = @base + BADGE_ADDR * @biw; 
     var tag_addr = @base + TAG_ADDR * @biw;
     var have_signal_addr = @base + HAVE_SIGNAL_ADDR * @biw;
     var should_reply_addr = @base + SHOULD_REPLY_ADDR * @biw;
     var reply_tag_addr = @base + REPLY_TAG_ADDR * @biw;
+    
     var tag = 0;
+    var badge = 0;
 
     while (true) {
         @microkit_have_signal(0, HAVE_SIGNAL_ADDR, 0, 0);
@@ -24,6 +27,7 @@ export fun handler_loop() {
         if (have_reply) {
             !stw reply_tag_addr, reply_tag;
             @microkit_reply_recv(0, REPLY_TAG_ADDR, BADGE_ADDR, TAG_ADDR);
+            have_reply = false;
         } else {
             if (microkit_have_signal) {
                 @microkit_nb_send_recv(0, BADGE_ADDR, 0, TAG_ADDR);
@@ -32,13 +36,11 @@ export fun handler_loop() {
             }
         }
 
-        var badge = lds 1 badge_addr;
+        badge = lds 1 badge_addr;
         tag = lds 1 tag_addr;
 
-        var is_endpoint = badge >> 63;
         var is_fault = (badge >> 62) & 1;
-
-        have_reply = false;
+        var is_endpoint = badge >> 63;
 
         if (is_fault) {
             var child = badge & PD_MASK;
@@ -57,12 +59,10 @@ export fun handler_loop() {
                 reply_tag = lds 1 reply_tag_addr;
             } else {
                 var idx = 0;
-
                 while (badge != 0) {
                     if (badge & 1) {
                         @microkit_notified_handler(0, idx, 0, 0);
                     }
-
                     badge = badge >> 1;
                     idx = idx + 1;
                 }

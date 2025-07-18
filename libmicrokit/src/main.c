@@ -70,7 +70,7 @@ extern void *microkit_cml_stack;
 extern void *microkit_cml_stackend;
 extern void microkit_cml_main(void);
 
-static char microkit_cml_memory[1024*20];
+static char microkit_cml_memory[1024*2];  // Reduced from 20KB to 2KB
 
 void microkit_cml_exit(int arg) {
     microkit_dbg_puts("ERROR! We should not be getting here\n");
@@ -92,8 +92,8 @@ void microkit_cml_clear() {
 }
 
 void microkit_init_pancake_mem() {
-    unsigned long microkit_cml_heap_sz = 1024*10;
-    unsigned long microkit_cml_stack_sz = 1024*10;
+    unsigned long microkit_cml_heap_sz = 1024*1;
+    unsigned long microkit_cml_stack_sz = 1024*1;
     microkit_cml_heap = microkit_cml_memory;
     microkit_cml_stack = microkit_cml_heap + microkit_cml_heap_sz;
     microkit_cml_stackend = microkit_cml_stack + microkit_cml_stack_sz;
@@ -151,13 +151,13 @@ void ffimicrokit_fault_handler(unsigned char *c, long clen, unsigned char *a, lo
     
     // c = reply_tag_addr (504), clen = child, a = should_reply_addr (503), alen = tag_addr (501)
     microkit_child child = clen;
-    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];  // Read tag from TAG_ADDR
+    seL4_MessageInfo_t msginfo = *(seL4_MessageInfo_t*)&pnk_mem[alen];
     seL4_MessageInfo_t reply_tag;
     
     seL4_Bool should_reply = fault(child, msginfo, &reply_tag);
     
-    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;  // Write reply_tag to REPLY_TAG_ADDR
-    pnk_mem[(uintptr_t)a] = should_reply;             // Write should_reply to SHOULD_REPLY_ADDR
+    pnk_mem[(uintptr_t)c] = *(seL4_Word*)&reply_tag;
+    pnk_mem[(uintptr_t)a] = should_reply;
 }
 
 /* FFI function to call protected handler - writes reply tag to memory */
