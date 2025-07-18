@@ -2,61 +2,45 @@
 #define CHANNEL_MASK 63
 
 #define BADGE_ADDR 500
-#define TAG_ADDR 501
 #define HAVE_SIGNAL_ADDR 502
 #define SHOULD_REPLY_ADDR 503
-#define REPLY_TAG_ADDR 504
 
 export fun handler_loop() {
-    var have_reply = false;
-    var reply_tag = 0;
-    
-    var badge_addr = @base + BADGE_ADDR * @biw; 
-    var tag_addr = @base + TAG_ADDR * @biw;
-    var have_signal_addr = @base + HAVE_SIGNAL_ADDR * @biw;
-    var should_reply_addr = @base + SHOULD_REPLY_ADDR * @biw;
-    var reply_tag_addr = @base + REPLY_TAG_ADDR * @biw;
-    
-    var tag = 0;
+    var have_reply = false;    
     var badge = 0;
 
     while (true) {
         @microkit_have_signal(0, HAVE_SIGNAL_ADDR, 0, 0);
-        var microkit_have_signal = lds 1 have_signal_addr;
+        var microkit_have_signal = lds 1 @base + HAVE_SIGNAL_ADDR * @biw;
 
         if (have_reply) {
-            !stw reply_tag_addr, reply_tag;
-            @microkit_reply_recv(0, REPLY_TAG_ADDR, BADGE_ADDR, TAG_ADDR);
+            @microkit_reply_recv(0, BADGE_ADDR, 0, 0);
             have_reply = false;
         } else {
             if (microkit_have_signal) {
-                @microkit_nb_send_recv(0, BADGE_ADDR, 0, TAG_ADDR);
+                @microkit_nb_send_recv(0, BADGE_ADDR, 0, 0);
             } else {
-                @microkit_recv(0, BADGE_ADDR, 0, TAG_ADDR);
+                @microkit_recv(0, BADGE_ADDR, 0, 0);
             }
         }
 
-        badge = lds 1 badge_addr;
-        tag = lds 1 tag_addr;
+        badge = lds 1 @base + BADGE_ADDR * @biw;
 
         var is_fault = (badge >> 62) & 1;
         var is_endpoint = badge >> 63;
 
         if (is_fault) {
             var child = badge & PD_MASK;
-            @microkit_fault_handler(REPLY_TAG_ADDR, child, SHOULD_REPLY_ADDR, TAG_ADDR);
-            
-            var reply_to_fault = lds 1 should_reply_addr;
+            @microkit_fault_handler(0, child, 0, @base + SHOULD_REPLY_ADDR * @biw);
+            var reply_to_fault = lds 1 @base + SHOULD_REPLY_ADDR * @biw;
             if (reply_to_fault) {
                 have_reply = true;
-                reply_tag = lds 1 reply_tag_addr;
             }
         } else {
             if (is_endpoint) {
                 var channel = badge & CHANNEL_MASK;
-                @microkit_protected_handler(REPLY_TAG_ADDR, channel, 0, TAG_ADDR);
+                @microkit_protected_handler(0, channel, 0, 0);
                 have_reply = true;
-                reply_tag = lds 1 reply_tag_addr;
             } else {
                 var idx = 0;
                 while (badge != 0) {
@@ -72,3 +56,5 @@ export fun handler_loop() {
 
     return 0;
 }
+
+
