@@ -35,7 +35,7 @@ CFLAGS := -std=gnu11 \
 		  -Iinclude -I$(SEL4_SDK)/include \
 		  $(CFLAGS_ARCH)
 
-MAIN_PNK = src/main.🥞 src/util.🥞
+MAIN_PNK = src/main.🥞
 
 CC_IS_CLANG := $(shell $(TOOLCHAIN)gcc --version 2>/dev/null | grep -q clang && echo yes || echo no)
 

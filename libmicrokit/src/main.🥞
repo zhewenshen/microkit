@@ -6,7 +6,7 @@
 #define SHOULD_REPLY_ADDR 503
 
 export fun handler_loop() {
-    var have_reply = false;    
+    var have_reply = false;
     var badge = 0;
 
     while (true) {
@@ -56,5 +56,3 @@ export fun handler_loop() {
 
     return 0;
 }
-
-

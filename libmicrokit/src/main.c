@@ -140,7 +140,8 @@ void main(void)
 {
     microkit_init_pancake_mem();
     run_init_funcs();
-    init();    /*
+    init();
+    /*
      * If we are passive, now our initialisation is complete we can
      * signal the monitor to unbind our scheduling context and bind
      * it to our notification object.
