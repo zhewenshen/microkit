@@ -46,7 +46,7 @@ else
 endif
 
 LIBS := libmicrokit.a
-OBJS := main.o crt0.o dbg.o pancake_ffi.o main_pnk.o
+OBJS := main.o crt0.o dbg.o main_pnk.o
 
 .DEFAULT_GOAL := all
 
@@ -57,9 +57,6 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 	$(TOOLCHAIN)as -g $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.c
-	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
-
-$(BUILD_DIR)/pancake_ffi.o: src/pancake_ffi.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/main_pnk.S: $(MAIN_PNK)

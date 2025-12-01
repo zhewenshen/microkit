@@ -136,6 +136,10 @@ void ffimicrokit_notified_handler(unsigned char *c, long clen, unsigned char *a,
     notified(clen);
 }
 
+void ffinop(unsigned char* c, long clen, unsigned char* a, long alen) {
+    // do nothing
+}
+
 void main(void)
 {
     microkit_init_pancake_mem();
