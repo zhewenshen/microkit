@@ -12,11 +12,7 @@
 
 #include <microkit.h>
 
-#define INPUT_CAP 1
-#define REPLY_CAP 4
-
-#define PD_MASK 0xff
-#define CHANNEL_MASK 0x3f
+extern void handler_loop(void);
 
 /* All globals are prefixed with microkit_* to avoid clashes with user defined globals. */
 
@@ -60,50 +56,6 @@ static void run_init_funcs(void)
     size_t count = __init_array_end - __init_array_start;
     for (size_t i = 0; i < count; i++) {
         __init_array_start[i]();
-    }
-}
-
-static void handler_loop(void)
-{
-    bool have_reply = false;
-    seL4_MessageInfo_t reply_tag;
-
-    for (;;) {
-        seL4_Word badge;
-        seL4_MessageInfo_t tag;
-
-        if (have_reply) {
-            tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
-        } else if (microkit_have_signal) {
-            tag = seL4_NBSendRecv(microkit_signal_cap, microkit_signal_msg, INPUT_CAP, &badge, REPLY_CAP);
-            microkit_have_signal = seL4_False;
-        } else {
-            tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
-        }
-
-        uint64_t is_endpoint = badge >> 63;
-        uint64_t is_fault = (badge >> 62) & 1;
-
-        have_reply = false;
-
-        if (is_fault) {
-            seL4_Bool reply_to_fault = fault(badge & PD_MASK, tag, &reply_tag);
-            if (reply_to_fault) {
-                have_reply = true;
-            }
-        } else if (is_endpoint) {
-            have_reply = true;
-            reply_tag = protected(badge & CHANNEL_MASK, tag);
-        } else {
-            unsigned int idx = 0;
-            do  {
-                if (badge & 1) {
-                    notified(idx);
-                }
-                badge >>= 1;
-                idx++;
-            } while (badge != 0);
-        }
     }
 }
 

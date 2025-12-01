@@ -35,8 +35,16 @@ CFLAGS := -std=gnu11 \
 		  -Iinclude -I$(SEL4_SDK)/include \
 		  $(CFLAGS_ARCH)
 
+CCOMP := ccomp
+CCOMP_FLAGS := -std=c11 -g -O3 -nostdlib -Wall -Werror
+
 LIBS := libmicrokit.a
-OBJS := main.o crt0.o dbg.o
+OBJS := main.o crt0.o dbg.o event_loop.o sel4_ffi.o
+
+LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
+
+.PHONY: all
+all: $(LIB)
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(TOOLCHAIN)gcc -x assembler-with-cpp -c $(CFLAGS) $< -o $@
@@ -47,9 +55,8 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 $(BUILD_DIR)/%.o : src/%.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
 
-LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
-
-all: $(LIB)
+$(BUILD_DIR)/event_loop.o : src/event_loop.c src/sel4_ffi.h
+	$(CCOMP) $(CCOMP_FLAGS) -c $< -o $@
 
 $(LIB): $(addprefix $(BUILD_DIR)/, $(OBJS))
 	$(TOOLCHAIN)ar -rv $@ $^
