@@ -136,6 +136,15 @@ void ffimicrokit_notified_handler(unsigned char *c, long clen, unsigned char *a,
     notified(clen);
 }
 
+void ffimicrokit_notify_scan(unsigned char *c, long clen, unsigned char *a, long alen) {
+    uint64_t badge = (uint64_t)clen;
+    while (badge) {
+        int idx = __builtin_ctzll(badge);
+        notified(idx);
+        badge &= badge - 1;  // clear lowest set bit
+    }
+}
+
 void ffinop(unsigned char* c, long clen, unsigned char* a, long alen) {
     // do nothing
 }
